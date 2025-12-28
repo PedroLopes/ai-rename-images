@@ -31,9 +31,9 @@ original_prompt = ("Describe the image in {number_of_words} simple keywords, nev
 prompt_output_format = ("Output in JSON format. "
                         "Use the following schema: { keywords: List[str] }.")
 
-
 ## Reset prompt
 reset_prompt = "Reset conversation context."
+
 # -------------
 # built-in imports
 # -------------
@@ -91,7 +91,7 @@ def configure_logging(verbose: bool):
 
 def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool) -> dict:
     global original_prompt
-    with image_path.open("rb") as img_file: #TODO confirm this is no PIL
+    with image_path.open("rb") as img_file:
         base64_string = base64.b64encode(img_file.read()).decode("utf-8")
   
     # perform substitution of --number (-n) argument into {number_of_words}
