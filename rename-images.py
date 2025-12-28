@@ -18,7 +18,6 @@
 ##    3.1. File count disregards non jpeg/jpg files better
 ##
 ## TODO: check the parallelism
-## TODO: format: words sepetrated by spaces, are collapsed into cinamon bun cinamonBun
 
 # User settings (e.g., alter the prompt, etc)
 
@@ -64,12 +63,17 @@ class ImageClassification(BaseModel):
     def keywords_to_string_with_delimiter(self, delimiter: str = "_", number_of_words: int = 3) -> str:
         if delimiter not in ["_", "-", " "]: #this is late to do this check, weird
             raise ValueError("Delimiter must be underscore '_', dash '-', or space ' '")
-               
-        cleaned_keywords = [
-            keyword.replace(" ", delimiter)
-            for keyword in self.keywords
-            if not any(char.isdigit() for char in keyword)
-        ]
+        cleaned_keywords = [] 
+        for keyword in self.keywords:
+            if keyword.find(" "):
+                new = keyword.replace(" ", "")
+            cleaned_keywords.append(new)
+
+        #cleaned_keywords = [
+        #    keyword.replace(" ", delimiter)
+        #    for keyword in self.keywords
+        #    if not any(char.isdigit() for char in keyword) TODO: why can't have digit?
+        #]
         return delimiter.join(cleaned_keywords[:number_of_words])
 
 # -----------------------------
@@ -156,6 +160,7 @@ def process_images(directory_path: Path, image_files: List[Path], delimiter: str
 
             keywords = json.loads(content)
             image_classification = ImageClassification(**keywords)
+            print(image_classification)
 
             new_name = image_classification.keywords_to_string_with_delimiter(delimiter, number_of_words)
             new_path = directory_path / f"{new_name}{file.suffix}"
