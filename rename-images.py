@@ -96,14 +96,14 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int)
         base64_string = base64.b64encode(img_file.read()).decode("utf-8")
     logger.info(f"{extra_prompt}")
     
-    original_prompt = f("Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words. "
+    original_prompt = (f"Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words. "
                   "Output in JSON format. "
                   "Use the following schema: { keywords: List[str] }.")
 
-
-    prompt = original_prompt #needs to rehash it here with f{}
     if extra_prompt:
         prompt = extra_prompt + original_prompt
+    else: 
+        prompt = original_prompt
     print(prompt)
  
     return ollama.chat(
