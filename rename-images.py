@@ -77,7 +77,6 @@ class ImageClassification(BaseModel):
 # -----------------------------
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.ERROR)
 
 def configure_logging(verbose: bool):
     logging.basicConfig(
@@ -112,10 +111,14 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
             #print(exif_data)
             metadata_text = []
             for tag_id, value in exif_data.items():
+                logger.info(f"{image_path}'s metadata:")
                 tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
-                #print(f"{tag_name}: {value}")
+                logger.info(f"\t{tag_name}: {value}")
                 metadata_text.append(f"{tag_name}: {value};") 
-            prompt += "You might find clues in the image's metadata: " + str(metadata_text) + " "          
+            if metadata_text:
+                prompt += "You might find clues in the image's metadata: " + str(metadata_text) + " "          
+            else: 
+                logger.info(f"{image_path}: metadata was empty")
  
     # add the format to the prompt
     prompt += prompt_output_format
@@ -220,6 +223,7 @@ def main():
         "--verbose",
         "-v",
         action="store_true",
+        default=False,
         help="Enable verbose output",
     )
 
@@ -241,7 +245,6 @@ def main():
 
     args = parser.parse_args()
     configure_logging(args.verbose)
-    logger.info("Started")
 
     if args.override and args.prompt:
         logger.error("ERROR: either use --override (-o) for a brand new prompt or --prompt (-p) to append to the default prompt, both simultaneously is nonsensical")
