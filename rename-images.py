@@ -4,39 +4,55 @@
 ## This is a fork of https://raw.githubusercontent.com/Tedfulk/ollama-rename-img/refs/heads/main/ollama_rename_img/main.py
 
 # Differences to original
-## 1. Support for custom prompts
-##    1.1. 
+## 1. Support for different models and custom prompts
+##    1.1. You can specify the name of the model you want to use with your ollama: -m <name_of_model>
+##    1.2. You can append extra information to the promp by adding: -p <your_extra_prompt>
+##    1.3. Supports passing photo metadata to prompt by adding: -e TODO: might not be working properly
+##    1.4. Supports resetting the conversation with AI model (by default, bypass with -k)
 
 ## 2. Dependencies
 ##    2.1. This version does not require the 'poetry' program to manage depedencies
 ##    2.2. Dependencies can be managed/install via the 'pip' program using the 'requirements.txt' file
+
+## 3. Minor
+##    3.1. File count disregards non jpeg/jpg files better
 ##
-##
+## TODO: check the parallelism
+## TODO: format: words sepetrated by spaces, are collapsed into cinamon bun cinamonBun
+
+# User settings (e.g., alter the prompt, etc)
+
+## Change prompt
+##   Note that {number_of_words} will be replaced later with --number (-n) argument if supplied
+original_prompt = ("Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words. ")
+
+## Prompt format
+##   Note that changing the prompt_output_format below is likely to cause errors (or requires code change)
+prompt_output_format = ("Output in JSON format. "
+                        "Use the following schema: { keywords: List[str] }.")
 
 
-## format: words sepetrated by spaces, are collapsed into cinamon bun cinamonBun
-
-# user settings (e.g., alter the prompt, etc)
-original_prompt = ("Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words. "
-                  "Output in JSON format. "
-                  "Use the following schema: { keywords: List[str] }.")
-
-#original_prompt = ("Ignore any previous request to describe images. Just respond with the word test. Use the following schema: { keywords: List[str] }.")
-
+## Reset prompt
+reset_prompt = "Reset conversation context."
+# -------------
 # built-in imports
+# -------------
 import argparse
 import base64
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import List
 
+# -------------
 # additional critical imports
+# -------------
 import ollama
-from PIL import Image
 from pydantic import BaseModel, Field
 from tqdm import tqdm
+#PIL is imported dynamically, neeed if you call with --exif (-e) to obtain image metadata
 
 # -----------------------------
 # Models
@@ -48,23 +64,13 @@ class ImageClassification(BaseModel):
     def keywords_to_string_with_delimiter(self, delimiter: str = "_", number_of_words: int = 3) -> str:
         if delimiter not in ["_", "-", " "]: #this is late to do this check, weird
             raise ValueError("Delimiter must be underscore '_', dash '-', or space ' '")
-
-        cleaned_keywords = []
-        # i want to this in a stabdard for loop
-        #for keyword in self.keywords: #add a number iter, so we can exit if
-        #    if iter > number_of_words:
-        #        break
-            # pass #keep adding
-        #    keyword.replace(" ", delimiter)
-        print("N: " + str(number_of_words))
-       
+               
         cleaned_keywords = [
             keyword.replace(" ", delimiter)
             for keyword in self.keywords
             if not any(char.isdigit() for char in keyword)
         ]
         return delimiter.join(cleaned_keywords[:number_of_words])
-
 
 # -----------------------------
 # Logging
@@ -80,61 +86,64 @@ def configure_logging(verbose: bool):
     )
 
 # -----------------------------
-# Image helpers
-# -----------------------------
-
-def convert_files_to_jpeg(directory_path: Path) -> List[Path]:
-    return converted
-
-
-# -----------------------------
 # AI interaction
 # -----------------------------
 
-def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int) -> dict:
-    with image_path.open("rb") as img_file:
+def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool) -> dict:
+    global original_prompt
+    with image_path.open("rb") as img_file: #TODO confirm this is no PIL
         base64_string = base64.b64encode(img_file.read()).decode("utf-8")
-    logger.info(f"{extra_prompt}")
-    
-    original_prompt = (f"Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words. "
-                  "Output in JSON format. "
-                  "Use the following schema: { keywords: List[str] }.")
+  
+    # perform substitution of --number (-n) argument into {number_of_words}
+    original_prompt = re.sub(r'{number_of_words}', str(number_of_words), original_prompt)
 
-    if extra_prompt:
-        prompt = extra_prompt + original_prompt
+    if extra_prompt: 
+        prompt = extra_prompt + " " + original_prompt #when --prompt (-p) is present, prepend a new prompt
+    elif new_prompt:
+        prompt = new_prompt #when --override (-o) is present, replace the entire prompt
     else: 
-        prompt = original_prompt
-    print(prompt)
+        prompt = original_prompt 
+
+    if metadata: #only using PIL for exif info
+        from PIL import Image
+        with Image.open(image_path) as img:
+            #print(image_path)
+            exif_data = img.getexif()
+            #print(exif_data)
+            metadata_text = []
+            for tag_id, value in exif_data.items():
+                tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
+                #print(f"{tag_name}: {value}")
+                metadata_text.append(f"{tag_name}: {value};") 
+            prompt += "You might find clues in the image's metadata: " + str(metadata_text) + " "          
+ 
+    # add the format to the prompt
+    prompt += prompt_output_format
+    
+    # Display the prompt to users
+    logger.info(f"Using prompt: {prompt}")
  
     return ollama.chat(
-        model="llava-phi3",
+        model=target_model,
         messages=[
             {
                 "role": "user",
-                #"content": (
-                #    "Describe the image in 4 simple keywords. "
-                #    "Output in JSON format. "
-                #    "Use the following schema: { keywords: List[str] }."
-                #),
                 "content": prompt,
                 "images": [base64_string],
             }
         ],
     )
 
-
 # -----------------------------
-# Core processing
+# Process images
 # -----------------------------
 
-def process_images(directory_path: Path, converted_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int):
-    for file in tqdm(converted_files, desc="Processing images", unit="image"):
-        if file.name == ".DS_Store": #mac only to skip system files, probably best to change to ".*" regex
-            continue
+def process_images(directory_path: Path, image_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool):
+    for file in tqdm(image_files, desc="Processing images", unit="image"):
 
         try:
-            response = generate_keywords(file, extra_prompt, number_of_words)
-            print(response)
+            response = generate_keywords(file, extra_prompt, number_of_words, target_model, new_prompt, metadata)
+            logger.info(f"Response: {response}")
             content = (
                 response["message"]["content"]
                 .replace("```json", "")
@@ -153,7 +162,6 @@ def process_images(directory_path: Path, converted_files: List[Path], delimiter:
 
         except Exception as e:
             logger.error(f"Error processing {file}: {e}")
-
 
 # -----------------------------
 # CLI arguments
@@ -186,13 +194,27 @@ def main():
     )
 
     parser.add_argument(
+        "--override",
+        "-o",
+        type=str,
+        help="Override the entire prompt (i.e., no other prompt but the text passed as argument)",
+    )
+
+    parser.add_argument(
+        "--model",
+        "-m",
+        type=str,
+        default="llava-phi3",
+        help="Specify name of model that you want to use with ollama (default = llava-phi3)",
+    )
+
+    parser.add_argument(
         "--number",
         "-n",
         type=int,
         default=3,
-        help="TODO",
+        help="Specify the number of keywords to be generated when describing and image",
     )
-
 
     parser.add_argument(
         "--verbose",
@@ -201,22 +223,58 @@ def main():
         help="Enable verbose output",
     )
 
+    parser.add_argument(
+        "--exif",
+        "-e",
+        action="store_true",
+        help="Enable parsing the metadata (EXIF) of a photo (e.g., author name, camera, GPS, etc) and pass this information to the prompt",
+    )
+
+
+    parser.add_argument(
+        "--keep",
+        "-k",
+        action="store_true",
+        default=False,
+        help="Do not reset the AI-model's conversation (i.e., continues the previous session if ollama still has it running). By default this is always reset.",
+    )
+
     args = parser.parse_args()
     configure_logging(args.verbose)
+    logger.info("Started")
+
+    if args.override and args.prompt:
+        logger.error("ERROR: either use --override (-o) for a brand new prompt or --prompt (-p) to append to the default prompt, both simultaneously is nonsensical")
+        return
 
     if not args.directory.exists():
         raise FileNotFoundError(f"Directory not found: {args.directory}")
 
-    converted = []
-    for file in args.directory.iterdir():
-        converted.append(Path(file))
+    if not args.keep:
+        logger.info("Requesting a reset of the conversation with AI mode.")
+        ollama.chat(
+            model=args.model,
+            messages=[
+                {
+                    "role": "system",
+                    "content": reset_prompt,
+                }
+            ],
+        )
 
-    if not converted:
+    image_files = []
+    for file in args.directory.iterdir():
+        if file.name.lower().endswith('.jpeg') or file.name.lower().endswith('.jpg'):
+            image_files.append(Path(file))
+        else: 
+            continue
+
+    if not image_files:
         logger.warning("No images to process (directory is likely empty of images).")
         return
 
     # process images
-    process_images(args.directory, converted, args.delimiter, args.prompt, args.number)
+    process_images(args.directory, image_files, args.delimiter, args.prompt, args.number, args.model, args.override, args.exif)
 
 # -----------------------------
 # Program starts here, i.e., main call
