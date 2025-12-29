@@ -63,8 +63,8 @@ pip install -r requirements.txt
 Clone the repository and make the script executable:
 
 ```bash
-git clone <your-repo-url>
-cd <repo>
+git clone https://github.com/PedroLopes/ai-rename-images
+cd ai-rename-images
 chmod +x ai_rename_images.py
 ```
 
