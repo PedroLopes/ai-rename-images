@@ -10,13 +10,13 @@ This project is a **fork and extension** of [ollama-rename-img](https://github.c
 ## Features
 
 - Rename `.jpg` / `.jpeg` images based on visual content
-- Supports **any Ollama vision-capable model** (unlike [https://github.com/Tedfulk/ollama-rename-img](ollama-rename-img)
-- Customizable prompts (append or fully override, unlike [https://github.com/Tedfulk/ollama-rename-img](ollama-rename-img)
-)
-- Optional conversation persistence with the model (unlike [https://github.com/Tedfulk/ollama-rename-img](ollama-rename-img)
-- Optional EXIF metadata injection into the prompt (unlike [https://github.com/Tedfulk/ollama-rename-img](ollama-rename-img)
-- Optional GPS reverse-geocoding (via `exiftool`) (unlike [https://github.com/Tedfulk/ollama-rename-img](ollama-rename-img)
--  No Poetry dependency — plain `pip` + `requirements.txt` (unlike [https://github.com/Tedfulk/ollama-rename-img](ollama-rename-img)
+- Supports **any Ollama vision-capable model** (unlike [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img)).
+- Customizable prompts (append or fully override, unlike [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img)).
+- Optional conversation persistence with the model (unlike [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img)).
+- Optional EXIF metadata injection into the prompt (unlike [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img)).
+- Optional GPS reverse-geocoding (via `exiftool`) (unlike [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img)).
+-  No Poetry dependency — plain `pip` + `requirements.txt` (unlike [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img)).
+
 
 ---
 
