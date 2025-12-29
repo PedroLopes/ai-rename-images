@@ -150,14 +150,22 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
                         metadata_text.append(str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
         else: # metadata will be parsed internally using python librariues, which will be now loaded
             from PIL import Image
+            from PIL.ExifTags import TAGS
             # any other imports here
             with Image.open(image_path) as img:
-                exif_data = img.getexif()
-                for tag_id, value in exif_data.items():
-                    logger.info(f"{image_path}'s metadata:")
-                    tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
-                    logger.info(f"\t{tag_name}: {value}")
-                    metadata_text.append(f"{tag_name}: {value};") 
+                exifdata = img.getexif()
+                for tag_id in exifdata:
+                    tag = TAGS.get(tag_id, tag_id)
+                    data = exifdata.get(tag_id)
+                    if isinstance(data, bytes):
+                        data = data.decode()
+                    print(f"{tag:25}: {data}")
+                    metadata_text.append(f"{tag}: {data};") 
+                #for tag_id, value in exif_data.items():
+                #    logger.info(f"{image_path}'s metadata:")
+                #    tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
+                #    logger.info(f"\t{tag_name}: {value}")
+                 #   metadata_text.append(f"{tag_name}: {value};") 
         if metadata_text:
             prompt += "You might find clues in the image's metadata (which is listed next using a colon separated list): " + str(metadata_text) + ". "          
             if location: 
