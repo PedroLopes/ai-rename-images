@@ -1,7 +1,6 @@
 # AI Image Renamer (Ollama-based)
 
-Rename JPEG images automatically using AI-generated keywords derived from image content (and optionally metadata).  
-This tool uses **Ollama multimodal models** to analyze images and generate concise, human-readable filenames. This can use local models, you control which model to use via ollama.
+Rename JPEG images automatically using AI-generated keywords derived from image content (and optionally metadata). It uses **Ollama multimodal models** to analyze images and generate concise, human-readable filenames. This can use local models, you control which model to use via ollama.
 
 This project is a **fork and extension** of [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img).
 
