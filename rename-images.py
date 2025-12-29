@@ -119,6 +119,7 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
     # ---------- metadata from images ----------- 
     if metadata or exiftool: #if user requested metadata added to prompt in either way (-e or -et) 
         metadata_text = []
+        location = ""
         if exiftool: # metadata will be parsed externally using exiftool (--exiftool or -et)
             logger.info("Exiftool mode for metadata")
             import subprocess #subprocess dynamicaly loaded only for exiftool
@@ -128,7 +129,25 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
             for tag in process.stdout:
                 line = tag.strip().split(':')
                 if line[0].strip() in metadata_filter: 
-                    metadata_text.append(str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
+                    compare = line[0].strip()
+                    if compare == "GPS Position":
+                        import pandas as pd # we are doing this dynamically as it currently is only needed for GPS
+                        from lat_lon_parser import parse #only loaded for GPS
+                        #gps = "43 deg 28\' 2.81\" N, 11 deg 53\' 6.46\" E" #grab GPS here
+                        gps = line[-1].strip()
+                        a = gps.split(",")
+                        coord1 = parse(a[0])
+                        coord2 = parse(a[1])
+                        logger.info(f"Coordinate 1: {coord1}")
+                        logger.info(f"Coordinate 2: {coord2}")
+                        from geopy.geocoders import Nominatim #only loaded for GPS
+                        geolocator = Nominatim(user_agent="Image tagger")
+                        location = geolocator.reverse(f"{coord1}, {coord2}")
+                        logger.info(location.address)
+                        location = location.address
+                    else: 
+                        logger.info("added metadata" + str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
+                        metadata_text.append(str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
         else: # metadata will be parsed internally using python librariues, which will be now loaded
             from PIL import Image
             # any other imports here
@@ -141,6 +160,8 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
                     metadata_text.append(f"{tag_name}: {value};") 
         if metadata_text:
             prompt += "You might find clues in the image's metadata (which is listed next using a colon separated list): " + str(metadata_text) + ". "          
+            if location: 
+                prompt += "Also, this image was taken in the following location, use this for clues as well: " + location + " ."
         else: 
             logger.info(f"{image_path}: metadata was empty")
      
@@ -180,7 +201,7 @@ def process_images(directory_path: Path, image_files: List[Path], delimiter: str
 
             keywords = json.loads(content)
             image_classification = ImageClassification(**keywords)
-            print(image_classification)
+            #print(image_classification)
 
             new_name = image_classification.keywords_to_string_with_delimiter(delimiter, number_of_words)
             new_path = directory_path / f"{new_name}{file.suffix}"
