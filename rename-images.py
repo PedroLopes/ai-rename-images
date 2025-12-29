@@ -18,6 +18,8 @@
 ##    3.1. File count disregards non jpeg/jpg files better
 ##
 ## TODO: check the parallelism
+# TODO: resolve GPS even in GPS Position : 43 deg 28' 2.81" N, 11 deg 53' 6.46" E exif? requires internet.  
+# --gps
 
 # User settings (e.g., alter the prompt, etc)
 
@@ -33,6 +35,15 @@ prompt_output_format = ("Output in JSON format. "
 ## Reset prompt
 reset_prompt = "Reset conversation context."
 
+## Select which image metadata to pass to prompt (note: more will contribute to a longer prompt)
+##   Note: see EXIF or exiftool for all the available labels
+metadata_filter = ["Date/Time Original", "Flash", "Make", "Camera Model Name", "Orientation", "GPS Position"]
+
+## If you are using exiftool (--exiftool or -et) as the external program to parse metadata, indicate its path
+exifToolPath = 'exiftool' #change here if this is not alias by the shell as exiftool
+
+
+# ------------------------ program starts here ------------------
 # -------------
 # built-in imports
 # -------------
@@ -52,6 +63,7 @@ import ollama
 from pydantic import BaseModel, Field
 from tqdm import tqdm
 #PIL is imported dynamically, neeed if you call with --exif (-e) to obtain image metadata
+#TODO: add all dynamic imports from exifs, e..g, geopy, pandas, etc
 
 # -----------------------------
 # Models
@@ -66,14 +78,11 @@ class ImageClassification(BaseModel):
         cleaned_keywords = [] 
         for keyword in self.keywords:
             if keyword.find(" "):
-                new = keyword.replace(" ", "")
+                new = ''.join(word[0].upper() + word[1:].lower() for word in keyword.split())
+                #new = keyword.replace(" ", "")
             cleaned_keywords.append(new)
 
-        #cleaned_keywords = [
-        #    keyword.replace(" ", delimiter)
-        #    for keyword in self.keywords
         #    if not any(char.isdigit() for char in keyword) TODO: why can't have digit?
-        #]
         return delimiter.join(cleaned_keywords[:number_of_words])
 
 # -----------------------------
@@ -92,7 +101,7 @@ def configure_logging(verbose: bool):
 # AI interaction
 # -----------------------------
 
-def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool) -> dict:
+def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool) -> dict:
     global original_prompt
     with image_path.open("rb") as img_file:
         base64_string = base64.b64encode(img_file.read()).decode("utf-8")
@@ -107,24 +116,35 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
     else: 
         prompt = original_prompt 
 
-    if metadata: #only using PIL for exif info
-        from PIL import Image
-        with Image.open(image_path) as img:
-            #print(image_path)
-            exif_data = img.getexif()
-            #print(exif_data)
-            metadata_text = []
-            for tag_id, value in exif_data.items():
-                logger.info(f"{image_path}'s metadata:")
-                tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
-                logger.info(f"\t{tag_name}: {value}")
-                metadata_text.append(f"{tag_name}: {value};") 
-            if metadata_text:
-                prompt += "You might find clues in the image's metadata: " + str(metadata_text) + " "          
-            else: 
-                logger.info(f"{image_path}: metadata was empty")
- 
-    # add the format to the prompt
+    # ---------- metadata from images ----------- 
+    if metadata or exiftool: #if user requested metadata added to prompt in either way (-e or -et) 
+        metadata_text = []
+        if exiftool: # metadata will be parsed externally using exiftool (--exiftool or -et)
+            logger.info("Exiftool mode for metadata")
+            import subprocess #subprocess dynamicaly loaded only for exiftool
+            # modified from a snippet by Vaibhav K, from stackoverflow
+            infoDict = {} #Creating the dict to get the metadata tags
+            process = subprocess.Popen([exifToolPath,image_path],stdout=subprocess.PIPE, stderr=subprocess.STDOUT,universal_newlines=True) 
+            for tag in process.stdout:
+                line = tag.strip().split(':')
+                if line[0].strip() in metadata_filter: 
+                    metadata_text.append(str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
+        else: # metadata will be parsed internally using python librariues, which will be now loaded
+            from PIL import Image
+            # any other imports here
+            with Image.open(image_path) as img:
+                exif_data = img.getexif()
+                for tag_id, value in exif_data.items():
+                    logger.info(f"{image_path}'s metadata:")
+                    tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
+                    logger.info(f"\t{tag_name}: {value}")
+                    metadata_text.append(f"{tag_name}: {value};") 
+        if metadata_text:
+            prompt += "You might find clues in the image's metadata (which is listed next using a colon separated list): " + str(metadata_text) + ". "          
+        else: 
+            logger.info(f"{image_path}: metadata was empty")
+     
+        # add the format to the prompt
     prompt += prompt_output_format
     
     # Display the prompt to users
@@ -145,11 +165,11 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
 # Process images
 # -----------------------------
 
-def process_images(directory_path: Path, image_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool):
+def process_images(directory_path: Path, image_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool):
     for file in tqdm(image_files, desc="Processing images", unit="image"):
 
         try:
-            response = generate_keywords(file, extra_prompt, number_of_words, target_model, new_prompt, metadata)
+            response = generate_keywords(file, extra_prompt, number_of_words, target_model, new_prompt, metadata, exiftool)
             logger.info(f"Response: {response}")
             content = (
                 response["message"]["content"]
@@ -236,9 +256,15 @@ def main():
         "--exif",
         "-e",
         action="store_true",
-        help="Enable parsing the metadata (EXIF) of a photo (e.g., author name, camera, GPS, etc) and pass this information to the prompt",
+        help="Enable parsing the metadata (EXIF) of a photo using python libraries (e.g., exif, geopy and others are used to decode author name, camera model, GPS, etc) and pass this information to the prompt",
     )
 
+    parser.add_argument(
+        "--exiftool",
+        "-et", 
+        action="store_true",
+        help="Enable parsing the metadata (EXIF) of a photo using the exiftool program, which is external and needs to be installed before running with this option. This allows to parse metadata (e.g., author name, camera, GPS, etc) and pass this information to the prompt",
+    )
 
     parser.add_argument(
         "--keep",
@@ -282,7 +308,7 @@ def main():
         return
 
     # process images
-    process_images(args.directory, image_files, args.delimiter, args.prompt, args.number, args.model, args.override, args.exif)
+    process_images(args.directory, image_files, args.delimiter, args.prompt, args.number, args.model, args.override, args.exif, args.exiftool)
 
 # -----------------------------
 # Program starts here, i.e., main call
