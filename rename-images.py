@@ -1,25 +1,20 @@
 #!/usr/bin/env python3
 
-# Credits
+#---------------------------
 ## This is a fork of https://raw.githubusercontent.com/Tedfulk/ollama-rename-img/refs/heads/main/ollama_rename_img/main.py
-
 # Differences to original
 ## 1. Support for different models and custom prompts
 ##    1.1. You can specify the name of the model you want to use with your ollama: -m <name_of_model>
 ##    1.2. You can append extra information to the promp by adding: -p <your_extra_prompt>
-##    1.3. Supports passing photo metadata to prompt by adding: -e TODO: might not be working properly
+##    1.3. Supports passing photo metadata to prompt by adding: -e or -et (suppports GPS but requires exiftool)
 ##    1.4. Supports resetting the conversation with AI model (by default, bypass with -k)
-
 ## 2. Dependencies
 ##    2.1. This version does not require the 'poetry' program to manage depedencies
 ##    2.2. Dependencies can be managed/install via the 'pip' program using the 'requirements.txt' file
-
 ## 3. Minor
 ##    3.1. File count disregards non jpeg/jpg files better
-##
-## TODO: check the parallelism
-# TODO: resolve GPS even in GPS Position : 43 deg 28' 2.81" N, 11 deg 53' 6.46" E exif? requires internet.  
-# --gps
+##    TODO: add parallelism if needed
+#---------------------------
 
 # User settings (e.g., alter the prompt, etc)
 
@@ -41,7 +36,6 @@ metadata_filter = ["Date/Time Original", "Flash", "Make", "Camera Model Name", "
 
 ## If you are using exiftool (--exiftool or -et) as the external program to parse metadata, indicate its path
 exifToolPath = 'exiftool' #change here if this is not alias by the shell as exiftool
-
 
 # ------------------------ program starts here ------------------
 # -------------
@@ -133,7 +127,6 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
                     if compare == "GPS Position":
                         import pandas as pd # we are doing this dynamically as it currently is only needed for GPS
                         from lat_lon_parser import parse #only loaded for GPS
-                        #gps = "43 deg 28\' 2.81\" N, 11 deg 53\' 6.46\" E" #grab GPS here
                         gps = line[-1].strip()
                         a = gps.split(",")
                         coord1 = parse(a[0])
@@ -161,11 +154,6 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
                         data = data.decode()
                     print(f"{tag:25}: {data}")
                     metadata_text.append(f"{tag}: {data};") 
-                #for tag_id, value in exif_data.items():
-                #    logger.info(f"{image_path}'s metadata:")
-                #    tag_name = Image.TAGS.get(tag_id, tag_id) #this might not be working yet
-                #    logger.info(f"\t{tag_name}: {value}")
-                 #   metadata_text.append(f"{tag_name}: {value};") 
         if metadata_text:
             prompt += "You might find clues in the image's metadata (which is listed next using a colon separated list): " + str(metadata_text) + ". "          
             if location: 
@@ -173,7 +161,7 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
         else: 
             logger.info(f"{image_path}: metadata was empty")
      
-        # add the format to the prompt
+    # add the format to the prompt
     prompt += prompt_output_format
     
     # Display the prompt to users
@@ -209,7 +197,7 @@ def process_images(directory_path: Path, image_files: List[Path], delimiter: str
 
             keywords = json.loads(content)
             image_classification = ImageClassification(**keywords)
-            #print(image_classification)
+            logger.info(image_classification)
 
             new_name = image_classification.keywords_to_string_with_delimiter(delimiter, number_of_words)
             new_path = directory_path / f"{new_name}{file.suffix}"
