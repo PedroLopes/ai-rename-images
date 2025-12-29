@@ -48,14 +48,14 @@ pip install -r requirements.txt
 
 ### Core dependencies include:
 
-  * ollama
-  * pydantic
-  * tqdm
+  * ``ollama`` 
+  * ``pydantic``
+  * ``tqdm``
 
 ### Optional dependencies (loaded dynamically as needed)
 
-  * ``Pillow`` (only if using --exif mode)
-  * geopy, lat-lon-parser, pandas (for GPS parsing while using --exiftool mode) 
+  * ``pillow`` (only if using --exif mode)
+  * ``geopy``, ``lat-lon-parser``, ``pandas`` (for GPS parsing while using --exiftool mode) 
 
 ## Installation
 
