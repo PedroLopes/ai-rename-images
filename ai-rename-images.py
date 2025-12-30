@@ -68,7 +68,7 @@ from tqdm import tqdm
 class ImageClassification(BaseModel):
     keywords: List[str] = Field(..., description="Keywords of the image.")
 
-    def keywords_to_string_with_delimiter(self, delimiter: str = "_", number_of_words: int = 3) -> str:
+    def keywords_to_string_with_delimiter(self, delimiter: str = "-", number_of_words: int = 3) -> str:
         if delimiter not in ["_", "-", " "]: #this is late to do this check, weird
             raise ValueError("Delimiter must be underscore '_', dash '-', or space ' '")
         cleaned_keywords = [] 
@@ -252,9 +252,9 @@ def main():
     parser.add_argument(
         "--delimiter",
         "-d",
-        default="_",
+        default="-",
         choices=["_", "-", " "],
-        help="Delimiter for keywords in filename (default: _)",
+        help="Delimiter for keywords in filename (default: -)",
     )
 
     parser.add_argument(
