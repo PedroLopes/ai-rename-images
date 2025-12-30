@@ -69,7 +69,7 @@ python3 ai_rename_images.py <directory-with-images>
 | `directory` | Directory containing images |
 | `-m, --model` | Ollama model to use (default: `llava-phi3`) |
 | `-n, --number` | Number of keywords (default: `3`) |
-| `-d, --delimiter` | `_`, `-`, or space (default: `_`) |
+| `-d, --delimiter` | `_`, `-`, or space (default: `-`) |
 | `-v, --verbose` | Enable verbose logging |
 
 ---
@@ -99,8 +99,8 @@ By default, the conversation is reset before processing images.
 
 | Option | Description |
 |------|-------------|
-| `-e, --exif` | Parse metadata using Python libraries |
-| `-et, --exiftool` | Parse metadata using external `exiftool` |
+| `-mt, --metadata` | Parse metadata using external `exiftool` (requires to install it, e.g., ``brew install exiftool``) |
+| `-mp, --metadata-python` | Parse metadata using Python libraries |
 
 When enabled, selected metadata fields (camera, flash, GPS, etc.) are appended to the prompt to improve keyword accuracy. You can configure which EXIF tags are included by editing:
 
@@ -115,6 +115,24 @@ metadata_filter = [
 ]
 ```
 
+Note: tests reveal that using ``exiftool`` enables a more accurate parsing of the tags, especially the GPS location. 
+
+### File date, directory, etc
+
+| Option | Description |
+|------|-------------|
+| `-dir, --directory-name` | Passes the directory name to the prompt for clues | 
+| `--t, --timestamp` | Passes the date of the image (as per file system / OS) to the prompt | 
+
+### Renaming files with prefixes, timestamps, postfixes, etc.
+
+| Option | Description |                                    
+|------|-------------|
+| `--pre, --prefix` | Passes a string as prefix for all files | 
+| `--pretime, --prefix-timestamp` | Passes the file's timestamp string as prefix for each file (if you want a current time, you can consider using ``--prefix $(date +%d-%m-%Y)`` | 
+| ``--post, --postfix | Same as above but appends at the end | 
+| ``--posttime, --postfix-timestamp | | Same as above but appends at the end | 
+
 ## Prompt Design
 
 The tool uses a structured prompt to ensure the AI returns machine-readable output.
@@ -122,12 +140,12 @@ The tool uses a structured prompt to ensure the AI returns machine-readable outp
 ### Default Prompt
 
 ```python
-Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words.
+Describe the image in {number} simple keywords, never use more than {number} words.
 Output in JSON format.
 Use the following schema: { keywords: List[str] }.
 ```
 
-- `{number_of_words}` is dynamically replaced using the `-n / --number` argument.
+- `{number}` is dynamically replaced using the `-n / --number` argument.
 - The model **must** return valid JSON matching the specified schema.
 - The prompt is intentionally strict to allow automatic parsing.
 
@@ -159,8 +177,8 @@ python3 ai_rename_images.py ./images -p "Focus on architectural features of the 
 
 ### Optional dependencies (loaded dynamically as needed)
 
-  * ``pillow`` (only if using --exif mode)
-  * ``geopy``, ``lat-lon-parser``, ``pandas`` (for GPS parsing while using --exiftool mode) 
+  * ``pillow`` (only if using --metadata-python mode)
+  * ``geopy``, ``lat-lon-parser``, ``pandas`` (for GPS parsing while using --metadata mode) 
 
 ## Credits
 
