@@ -2,6 +2,7 @@
 set -e
 
 TOOL_NAME="ai-rename-images"
+TOOL_FILE="ai-rename-images.py"
 INSTALL_DIR="$HOME/.local/$TOOL_NAME"
 BIN_DIR="$HOME/.local/bin"
 
@@ -20,7 +21,7 @@ pip install --upgrade pip
 pip install -r requirements.txt
 
 # Copy script
-cp yourtool.py "$INSTALL_DIR/$TOOL_NAME"
+cp "$TOOL_FILE" "$INSTALL_DIR/$TOOL_NAME"
 
 # Create launcher
 cat > "$BIN_DIR/$TOOL_NAME" <<EOF
