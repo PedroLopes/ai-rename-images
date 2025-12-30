@@ -57,4 +57,3 @@ grep -qxF "$LINE" "$PROFILE" || echo "$LINE" >> "$PROFILE"
 echo "Added to $PROFILE. Restart your shell."
 
 echo "Installed successfully!"
-#echo "Make sure ~/.local/bin is in your PATH"
