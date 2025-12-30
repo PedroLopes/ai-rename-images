@@ -9,6 +9,7 @@
 ##    1.3. Supports passing photo metadata to prompt by adding: -e or -et (suppports GPS but requires exiftool)
 ##    1.4. Supports resetting the conversation with AI model (by default, bypass with -k)
 ##    1.5. Supports passing the directory name to the prompt using -d
+##    1.6. Supports passing the file's timestamp (from OS) to the prompt using -t
 ## 2. Dependencies
 ##    2.1. This version does not require the 'poetry' program to manage depedencies
 ##    2.2. Dependencies can be managed/install via the 'pip' program using the 'requirements.txt' file
@@ -20,8 +21,8 @@
 # User settings (e.g., alter the prompt, etc)
 
 ## Change prompt
-##   Note that {number_of_words} will be replaced later with --number (-n) argument if supplied
-original_prompt = ("Describe the image in {number_of_words} simple keywords, never use more than {number_of_words} words. ")
+##   Note that {number} (of words) will be replaced later with --number (-n) argument if supplied
+original_prompt = ("Describe the image in {number} simple keywords, never use more than {number} words. ")
 
 ## Prompt format
 ##   Note that changing the prompt_output_format below is likely to cause errors (or requires code change)
@@ -35,7 +36,7 @@ reset_prompt = "Reset conversation context."
 ##   Note: see EXIF or exiftool for all the available labels
 metadata_filter = ["Date/Time Original", "Flash", "Make", "Camera Model Name", "Orientation", "GPS Position"]
 
-## If you are using exiftool (--exiftool or -et) as the external program to parse metadata, indicate its path
+## If you are using exiftool (--metadata) as the external program to parse metadata, indicate its path
 exifToolPath = 'exiftool' #change here if this is not alias by the shell as exiftool
 
 # ------------------------ program starts here ------------------
@@ -58,8 +59,8 @@ from datetime import datetime
 import ollama
 from pydantic import BaseModel, Field
 from tqdm import tqdm
-#PIL is imported dynamically, neeed if you call with --exif (-e) to obtain image metadata
-#TODO: add all dynamic imports from exifs, e..g, geopy, pandas, etc
+#PIL, geopy, pandas, etc are imported dynamically when you call with --metadata-python (-mp) to obtain image metadata
+#subprocess will be loaded dynamically when you call with --metadata to call exiftool
 
 # -----------------------------
 # Models
@@ -68,18 +69,15 @@ from tqdm import tqdm
 class ImageClassification(BaseModel):
     keywords: List[str] = Field(..., description="Keywords of the image.")
 
-    def keywords_to_string_with_delimiter(self, delimiter: str = "-", number_of_words: int = 3) -> str:
-        if delimiter not in ["_", "-", " "]: #this is late to do this check, weird
+    def keywords_to_string_with_delimiter(self, args: list) -> str:
+        if args.delimiter not in ["_", "-", " "]: #this is late to do this check, weird
             raise ValueError("Delimiter must be underscore '_', dash '-', or space ' '")
         cleaned_keywords = [] 
         for keyword in self.keywords:
             if keyword.find(" "):
                 new = ''.join(word[0].upper() + word[1:].lower() for word in keyword.split())
-                #new = keyword.replace(" ", "")
             cleaned_keywords.append(new)
-
-        #    if not any(char.isdigit() for char in keyword) TODO: why can't have digit?
-        return delimiter.join(cleaned_keywords[:number_of_words])
+        return args.delimiter.join(cleaned_keywords[:args.number])
 
 # -----------------------------
 # Logging
@@ -97,26 +95,26 @@ def configure_logging(verbose: bool):
 # AI interaction
 # -----------------------------
 
-def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool, directory_name: str, timestamp: str) -> dict:
+def generate_keywords(image_path: Path, args: list) -> dict:
     global original_prompt
     with image_path.open("rb") as img_file:
         base64_string = base64.b64encode(img_file.read()).decode("utf-8")
   
-    # perform substitution of --number (-n) argument into {number_of_words}
-    original_prompt = re.sub(r'{number_of_words}', str(number_of_words), original_prompt)
+    # perform substitution of --number (-n) argument into {number}
+    original_prompt = re.sub(r'{number}', str(args.number), original_prompt)
 
-    if extra_prompt: 
-        prompt = extra_prompt + " " + original_prompt #when --prompt (-p) is present, prepend a new prompt
-    elif new_prompt:
-        prompt = new_prompt #when --override (-o) is present, replace the entire prompt
+    if args.prompt: 
+        prompt = args.prompt + " " + original_prompt #when --prompt (-p) is present, prepend a new prompt
+    elif args.override:
+        prompt = args.override #when --override (-o) is present, replace the entire prompt
     else: 
         prompt = original_prompt 
 
     # ---------- metadata from images ----------- 
-    if metadata or exiftool: #if user requested metadata added to prompt in either way (-e or -et) 
+    if args.metadata or args.metadata_python: #if user requested metadata added to prompt in either way (-e or -et) 
         metadata_text = []
         location = ""
-        if exiftool: # metadata will be parsed externally using exiftool (--exiftool or -et)
+        if args.metadata: # metadata will be parsed externally using exiftool (--metadata)
             logger.info("Exiftool mode for metadata")
             import subprocess #subprocess dynamicaly loaded only for exiftool
             # modified from a snippet by Vaibhav K, from stackoverflow
@@ -143,10 +141,9 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
                     else: 
                         logger.info("added metadata" + str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
                         metadata_text.append(str(line[0].strip()) + ':' + str(line[-1].strip()) +  "; ")
-        else: # metadata will be parsed internally using python librariues, which will be now loaded
+        else: # metadata will be parsed internally using python libraries, which will be now loaded
             from PIL import Image
             from PIL.ExifTags import TAGS
-            # any other imports here
             with Image.open(image_path) as img:
                 exifdata = img.getexif()
                 for tag_id in exifdata:
@@ -163,11 +160,12 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
         else: 
             logger.info(f"{image_path}: metadata was empty")
      
-    if directory_name:
+    if args.directory_name:
         print("DIR!")
         prompt += "Additionally, consider also that this image is saved in a directory named " + str(directory.stem) + ". "
 
-    if timestamp and timestamp != "":
+    if args.timestamp: #passes timestamp info to prompt
+        logger.info("Using timestamp")
         modification_datetime = datetime.fromtimestamp(os.path.getmtime(image_path))
         formatted_date = modification_datetime.strftime('%Y-%m-%d')
         prompt += "Also, consider that this image was created at " + str(formatted_date) + ". " 
@@ -179,7 +177,7 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
     logger.info(f"Using prompt: {prompt}")
  
     return ollama.chat(
-        model=target_model,
+        model=args.model,
         messages=[
             {
                 "role": "user",
@@ -193,11 +191,11 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
 # Process images
 # -----------------------------
 
-def process_images(directory_path: Path, image_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool, directory_name: str, prefix: str, postfix: str, timestamp: bool):
+def process_images(directory_path: Path, image_files: List[Path], args: list):
     for file in tqdm(image_files, desc="Processing images", unit="image"):
 
         try:
-            response = generate_keywords(file, extra_prompt, number_of_words, target_model, new_prompt, metadata, exiftool, directory_name, timestamp)
+            response = generate_keywords(file, args)
             logger.info(f"Response: {response}")
             content = (
                 response["message"]["content"]
@@ -210,19 +208,20 @@ def process_images(directory_path: Path, image_files: List[Path], delimiter: str
             image_classification = ImageClassification(**keywords)
             logger.info(image_classification)
 
-            new_name = image_classification.keywords_to_string_with_delimiter(delimiter, number_of_words)
-            if prefix:
-                if prefix == "" and timestamp: #prefix the timestamp as YYYY-MM-DD
-                    print(os.path.getmtime(file))
-                    new_name = os.path.getmtime(file) + new_name
-                else: #normal prefix 
-                    new_name = prefix.join(s.split()) + new_name
-            if postfix:
-                if postfix == "" and timestamp: #post the timestamp as YYYY-MM-DD
-                    print(os.path.getmtime(file))
-                    new_name = new_name + os.path.getmtime(file) 
-                else: #normal postfix
-                    new_name = new_name + postfix.join(s.split())
+            new_name = image_classification.keywords_to_string_with_delimiter(args)
+            
+            #if timestamp is to be prefixed
+            if args.prefix_timestamp or args.postfix_timestamp: #prefix the timestamp as YYYY-MM-DD
+                print("prefixed")
+                modification_datetime = datetime.fromtimestamp(os.path.getmtime(image_path))
+                formatted_date = modification_datetime.strftime(f'%Y{args.delimiter}%m{args.delimiter}%d')
+                #new_name = str(formatted_date) + str(new_name)
+                new_name = (formatted_date + args.delimiter + new_name) if args.prefix_timestamp else (new_name + args.delimiter + formatted_date)
+
+            if args.prefix:
+                new_name = args.prefix.join(args.prefix.split()) + args.delimiter + new_name
+            if args.postfix:
+                new_name = new_name + args.delimiter + args.postfix.join(args.postfix.split())
 
             # adding back the directory path        
             new_path = directory_path / f"{new_name}{file.suffix}"
@@ -308,7 +307,15 @@ def main():
         "-pre",
         type=str,
         default="",
-        help="Adds a prefix to every renamed file, e.g., --prefix \"Japan\", will add Japan followed by the delimiter (or default delimiter if not provided) before every final filename.",
+        help="Adds a prefix to every renamed file, e.g., --prefix Japan, will add Japan followed by the delimiter (or default delimiter if not provided) before every final filename. (Tip: if you want to prefix a timestamp you can use --prefix-timestamp or --prefix $(date +%%d-%%m-%%Y) to format as you wish)",
+    )
+
+    parser.add_argument(
+        "--prefix-timestamp",
+        "-pretime",
+        action="store_true",
+        default=False,
+        help="Adds a prefix timestamp (YYYY-MM-DD) to every renamed file. (Tip: if you want a custom date format that differs from this one, you can use  --prefix $(date +%%d-%%m-%%Y) to format as you wish)"
     )
 
     parser.add_argument(
@@ -316,29 +323,43 @@ def main():
         "-post",
         type=str,
         default="",
-        help="Adds a postfix to every renamed file, e.g., --prefix \"Japan\", will add Japan followed by the delimiter (or default delimiter if not provided) after every final filename.",
+        help="Adds a postfix to every renamed file, e.g., --postfix Japan, will add Japan followed by the delimiter (or default delimiter if not provided) after every final filename. (Tip: if you want to postfix a timestamp you can use ==postfix-timestamp instead or --postfix $(date +%%d-%%m-%%Y) to format as you wish)",
+    )
+
+    parser.add_argument(
+        "--postfix-timestamp",
+        "-posttime",
+        action="store_true",
+        default=False,
+        help="Adds a postfix (i.e., appends at the end) timestamp (YYYY-MM-DD) to the end of every renamed file. (Tip: if you want a custom date format that differs from this one, you can use  --postfix $(date +%%d-%%m-%%Y) to format as you wish)"
     )
 
     parser.add_argument(
         "--timestamp",
         "-t",
         action="store_true",
-        help="Enable parsing the file's timestamp (created date) to the prompt for clues (note this is not a prefix/postfix, for that, you can use --timestamp and --prefix/--postfix without arguments, which will cause it to use the timestamp formatted as YYYY-MM-DD (for alternative approaches, you can use a bashscript itself as follows --prefix \"$(date +\"%d-%m-%Y\")\"",
+        help="Enable parsing the file's timestamp (created date) to the prompt for clues. (Tip: if you want to prefix or postfix a timestamp, you can use --prefix-timestamp or --postfix-timestamp instead).")
+
+    parser.add_argument(
+        "--metadata",
+        "-mt",
+        action="store_true",
+        help="Enable parsing the metadata of an image file and passing it to the prompt. By default this will require exiftool to be installed, if you want to parse metadata with python libraries instead (e.g., exif, geopy and others are used to decode author name, camera model, GPS, etc) then you need to use --metadata-python",
     )
 
     parser.add_argument(
-        "--exif",
-        "-e",
+        "--metadata-python",
+        "-mp",
         action="store_true",
-        help="Enable parsing the metadata (EXIF) of a photo using python libraries (e.g., exif, geopy and others are used to decode author name, camera model, GPS, etc) and pass this information to the prompt",
+        help="Enable parsing the metadata of an image file and passing it to the prompt. With this option it will use python libraries (e.g., exif, geopy and others are used to decode author name, camera model, GPS, etc). If you want to use exiftool instead, then you need to use --metadata",
     )
 
-    parser.add_argument(
-        "--exiftool",
-        "-et", 
-        action="store_true",
-        help="Enable parsing the metadata (EXIF) of a photo using the exiftool program, which is external and needs to be installed before running with this option. This allows to parse metadata (e.g., author name, camera, GPS, etc) and pass this information to the prompt",
-    )
+#    parser.add_argument(
+#        "--exiftool",
+#        "-et", 
+#        action="store_true",
+#        help="Enable parsing the metadata (EXIF) of a photo using the exiftool program, which is external and needs to be installed before running with this option. This allows to parse metadata (e.g., author name, camera, GPS, etc) and pass this information to the prompt",
+#    )
 
     parser.add_argument(
         "--keep",
@@ -349,6 +370,7 @@ def main():
     )
 
     args = parser.parse_args()
+    print(args)
     configure_logging(args.verbose)
     print(args.directory_name)
 
@@ -382,8 +404,8 @@ def main():
         logger.warning("No images to process (directory is likely empty of images).")
         return
 
-    # process images
-    process_images(args.directory, image_files, args.delimiter, args.prompt, args.number, args.model, args.override, args.exif, args.exiftool, args.directory_name, args.prefix, args.postfix, args.timestamp)
+    # process images if .jpeg
+    process_images(args.directory, image_files, args)
 
 # -----------------------------
 # Program starts here, i.e., main call
