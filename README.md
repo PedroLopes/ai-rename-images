@@ -47,6 +47,7 @@ git clone https://github.com/PedroLopes/ai-rename-images
 cd ai-rename-images
 chmod +x install.sh
 ./install.sh
+```
 
 Alternatively, if you want to do it manually:
 
