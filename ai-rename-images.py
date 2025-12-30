@@ -167,15 +167,9 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
         print("DIR!")
         prompt += "Additionally, consider also that this image is saved in a directory named " + str(directory.stem) + ". "
 
-
-
     if timestamp and timestamp != "":
-        print("TIME")
-        print(os.path.getmtime(image_path))
         modification_datetime = datetime.fromtimestamp(os.path.getmtime(image_path))
-        # Format the datetime object as YYYY-MM-DD
         formatted_date = modification_datetime.strftime('%Y-%m-%d')
-        print(formatted_date)
         prompt += "Also, consider that this image was created at " + str(formatted_date) + ". " 
 
     # add the format to the prompt
