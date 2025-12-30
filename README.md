@@ -40,7 +40,15 @@ For each image, the program:
 
 ### Installation
 
-Clone the repository and make the script executable:
+Clone the repository and make the installer executable and install it:
+
+```bash
+git clone https://github.com/PedroLopes/ai-rename-images
+cd ai-rename-images
+chmod +x install.sh
+./install.sh
+
+Alternatively, if you want to do it manually:
 
 ```bash
 git clone https://github.com/PedroLopes/ai-rename-images
