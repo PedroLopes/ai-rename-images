@@ -151,7 +151,6 @@ def generate_keywords(image_path: Path, args: list) -> dict:
                     data = exifdata.get(tag_id)
                     if isinstance(data, bytes):
                         data = data.decode()
-                    print(f"{tag:25}: {data}")
                     metadata_text.append(f"{tag}: {data};") 
         if metadata_text:
             prompt += "You might find clues in the image's metadata (which is listed next using a colon separated list): " + str(metadata_text) + ". "          
@@ -161,8 +160,7 @@ def generate_keywords(image_path: Path, args: list) -> dict:
             logger.info(f"{image_path}: metadata was empty")
      
     if args.directory_name:
-        print("DIR!")
-        prompt += "Additionally, consider also that this image is saved in a directory named " + str(directory.stem) + ". "
+        prompt += "Additionally, consider also that this image is saved in a directory named " + str(image_path.parent) + ". "
 
     if args.timestamp: #passes timestamp info to prompt
         logger.info("Using timestamp")
@@ -212,8 +210,7 @@ def process_images(directory_path: Path, image_files: List[Path], args: list):
             
             #if timestamp is to be prefixed
             if args.prefix_timestamp or args.postfix_timestamp: #prefix the timestamp as YYYY-MM-DD
-                print("prefixed")
-                modification_datetime = datetime.fromtimestamp(os.path.getmtime(image_path))
+                modification_datetime = datetime.fromtimestamp(os.path.getmtime(file))
                 formatted_date = modification_datetime.strftime(f'%Y{args.delimiter}%m{args.delimiter}%d')
                 #new_name = str(formatted_date) + str(new_name)
                 new_name = (formatted_date + args.delimiter + new_name) if args.prefix_timestamp else (new_name + args.delimiter + formatted_date)
@@ -370,9 +367,8 @@ def main():
     )
 
     args = parser.parse_args()
-    print(args)
+    logger.info("Invoked with arguments: " + str(args))
     configure_logging(args.verbose)
-    print(args.directory_name)
 
     if args.override and args.prompt:
         logger.error("ERROR: either use --override (-o) for a brand new prompt or --prompt (-p) to append to the default prompt, both simultaneously is nonsensical")
