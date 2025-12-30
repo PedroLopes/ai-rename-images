@@ -8,6 +8,7 @@
 ##    1.2. You can append extra information to the promp by adding: -p <your_extra_prompt>
 ##    1.3. Supports passing photo metadata to prompt by adding: -e or -et (suppports GPS but requires exiftool)
 ##    1.4. Supports resetting the conversation with AI model (by default, bypass with -k)
+##    1.5. Supports passing the directory name to the prompt using -d
 ## 2. Dependencies
 ##    2.1. This version does not require the 'poetry' program to manage depedencies
 ##    2.2. Dependencies can be managed/install via the 'pip' program using the 'requirements.txt' file
@@ -49,6 +50,7 @@ import os
 import re
 from pathlib import Path
 from typing import List
+from datetime import datetime
 
 # -------------
 # additional critical imports
@@ -95,7 +97,7 @@ def configure_logging(verbose: bool):
 # AI interaction
 # -----------------------------
 
-def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool) -> dict:
+def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool, directory_name: str, timestamp: str) -> dict:
     global original_prompt
     with image_path.open("rb") as img_file:
         base64_string = base64.b64encode(img_file.read()).decode("utf-8")
@@ -161,6 +163,21 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
         else: 
             logger.info(f"{image_path}: metadata was empty")
      
+    if directory_name:
+        print("DIR!")
+        prompt += "Additionally, consider also that this image is saved in a directory named " + str(directory.stem) + ". "
+
+
+
+    if timestamp and timestamp != "":
+        print("TIME")
+        print(os.path.getmtime(image_path))
+        modification_datetime = datetime.fromtimestamp(os.path.getmtime(image_path))
+        # Format the datetime object as YYYY-MM-DD
+        formatted_date = modification_datetime.strftime('%Y-%m-%d')
+        print(formatted_date)
+        prompt += "Also, consider that this image was created at " + str(formatted_date) + ". " 
+
     # add the format to the prompt
     prompt += prompt_output_format
     
@@ -182,11 +199,11 @@ def generate_keywords(image_path: Path, extra_prompt: str, number_of_words: int,
 # Process images
 # -----------------------------
 
-def process_images(directory_path: Path, image_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool):
+def process_images(directory_path: Path, image_files: List[Path], delimiter: str, extra_prompt: str, number_of_words: int, target_model: str, new_prompt: str, metadata: bool, exiftool: bool, directory_name: str, prefix: str, postfix: str, timestamp: bool):
     for file in tqdm(image_files, desc="Processing images", unit="image"):
 
         try:
-            response = generate_keywords(file, extra_prompt, number_of_words, target_model, new_prompt, metadata, exiftool)
+            response = generate_keywords(file, extra_prompt, number_of_words, target_model, new_prompt, metadata, exiftool, directory_name, timestamp)
             logger.info(f"Response: {response}")
             content = (
                 response["message"]["content"]
@@ -200,8 +217,23 @@ def process_images(directory_path: Path, image_files: List[Path], delimiter: str
             logger.info(image_classification)
 
             new_name = image_classification.keywords_to_string_with_delimiter(delimiter, number_of_words)
+            if prefix:
+                if prefix == "" and timestamp: #prefix the timestamp as YYYY-MM-DD
+                    print(os.path.getmtime(file))
+                    new_name = os.path.getmtime(file) + new_name
+                else: #normal prefix 
+                    new_name = prefix.join(s.split()) + new_name
+            if postfix:
+                if postfix == "" and timestamp: #post the timestamp as YYYY-MM-DD
+                    print(os.path.getmtime(file))
+                    new_name = new_name + os.path.getmtime(file) 
+                else: #normal postfix
+                    new_name = new_name + postfix.join(s.split())
+
+            # adding back the directory path        
             new_path = directory_path / f"{new_name}{file.suffix}"
 
+            # renaming the file for real
             file.rename(new_path)
             logger.info(f"Renamed {file.name} → {new_path.name}")
 
@@ -270,6 +302,37 @@ def main():
     )
 
     parser.add_argument(
+        "--directory-name",
+        "-dir",
+        action="store_true",
+        default=False,
+        help="Passes the directory name to the prompt, can be helpful to rename contextually using the directory name as a clue",
+    )
+
+    parser.add_argument(
+        "--prefix",
+        "-pre",
+        type=str,
+        default="",
+        help="Adds a prefix to every renamed file, e.g., --prefix \"Japan\", will add Japan followed by the delimiter (or default delimiter if not provided) before every final filename.",
+    )
+
+    parser.add_argument(
+        "--postfix",
+        "-post",
+        type=str,
+        default="",
+        help="Adds a postfix to every renamed file, e.g., --prefix \"Japan\", will add Japan followed by the delimiter (or default delimiter if not provided) after every final filename.",
+    )
+
+    parser.add_argument(
+        "--timestamp",
+        "-t",
+        action="store_true",
+        help="Enable parsing the file's timestamp (created date) to the prompt for clues (note this is not a prefix/postfix, for that, you can use --timestamp and --prefix/--postfix without arguments, which will cause it to use the timestamp formatted as YYYY-MM-DD (for alternative approaches, you can use a bashscript itself as follows --prefix \"$(date +\"%d-%m-%Y\")\"",
+    )
+
+    parser.add_argument(
         "--exif",
         "-e",
         action="store_true",
@@ -293,6 +356,7 @@ def main():
 
     args = parser.parse_args()
     configure_logging(args.verbose)
+    print(args.directory_name)
 
     if args.override and args.prompt:
         logger.error("ERROR: either use --override (-o) for a brand new prompt or --prompt (-p) to append to the default prompt, both simultaneously is nonsensical")
@@ -325,7 +389,7 @@ def main():
         return
 
     # process images
-    process_images(args.directory, image_files, args.delimiter, args.prompt, args.number, args.model, args.override, args.exif, args.exiftool)
+    process_images(args.directory, image_files, args.delimiter, args.prompt, args.number, args.model, args.override, args.exif, args.exiftool, args.directory_name, args.prefix, args.postfix, args.timestamp)
 
 # -----------------------------
 # Program starts here, i.e., main call
