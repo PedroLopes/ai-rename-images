@@ -4,6 +4,8 @@ Rename JPEG images automatically using AI-generated keywords derived from image 
 
 This project is a **fork and extension** of [ollama-rename-img](https://github.com/Tedfulk/ollama-rename-img).
 
+(There is an advanced version of this project, which can rename not only images but also text/PDF/DOCX files, also using ollama-based models, which is available at [ai-rename-files](https://github.com/PedroLopes/ai-rename-files). Conversely, if you need a interactive batch-renamer that previews a file, then asks you the content (rather than using AI), you can use [peek-rename](https://github.com/PedroLopes/peek-rename).)
+
 ---
 
 ## Features
